@@ -1,9 +1,8 @@
 import React from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
 import { List, Title, Headline, Text, Appbar } from 'react-native-paper';
-// import * as geolib from 'geolib';
 import MapView, { Polyline, Marker } from 'react-native-maps';
-import { fetchData, csvrowToJson, parseCsvdata, twoDecimals } from './libWalkTrack';
+import { fetchData, fetchDataFromLocal, csvrowToJson, parseCsvdata, twoDecimals } from './libWalkTrack';
 
 /*---------------- App Component ---------------------*/
 const WalkTrackApp = () => {
@@ -13,15 +12,17 @@ const WalkTrackApp = () => {
   const [refreshing, setRefreshing] = React.useState(false);
   const [walkinfo, setWalkinfo] = React.useState([]);
   const [minThreshold, setMinThreshold] = React.useState(10);
+  const [selectedWalkIndex, setSelectedWalkIndex] = React.useState(-1);
   const mapRef = React.useRef();
 
-  /*---------------- Constants ---------------------*/
+  /*---------------- Data Source URL  ---------------------*/
   const urlSource = "https://bit.ly/3vjOhiJ";
+  const isOnline = false;
 
   /*---------------- Data refresh function ---------------------*/
   const pullData = async (url) => {
     await setRefreshing(true);
-    const csvdata = await fetchData(url);
+    const csvdata = (isOnline)? await fetchData(url): await fetchDataFromLocal();
     if (!csvdata) {
       await setRefreshing(false);
       return false;
@@ -34,17 +35,26 @@ const WalkTrackApp = () => {
 
   /*---------------- FlatList functions ---------------------*/
   const renderItem = ({item, index}) => {
+    const borderColor = (index === selectedWalkIndex)? "orange": "gray";
     return (
       <View>
         <List.Item
-          style={styles.listitem}
-          title={`Walk #${index + 1}`}
-          description={`Dist:${item.distance}mt Dur:${twoDecimals(item.duration / 60)}min Avg Spd:${twoDecimals(item.speed)}mt/sec`}
+          style={[styles.listitem, {borderColor}]}
+          title={`Walk #${index + 1} Distance: ${item.distance}m`}
+          description={
+            `Dur.: ${twoDecimals(item.duration / 60)}mins `+
+            `Avg Spd: ${twoDecimals(item.speed)}m/sec`}
           left={props => <List.Icon {...props} icon="walk" style={styles.icon} />}
           onPress={()=>{
-            const newWalkinfo = item.gps.map(e => {return {latitude:e.latitude, longitude:e.longitude}})
+            const newWalkinfo = item.gps.map(e => {return {latitude:e.latitude, longitude:e.longitude, timestamp:e.timestamp}})
             setWalkinfo(newWalkinfo);
             mapRef.current.fitToCoordinates(newWalkinfo);
+            setSelectedWalkIndex(index);
+            // print current walk info on console
+            // console.log(`Walk #${index + 1} Distance: ${item.distance}m `+
+            //   `Duration: ${twoDecimals(item.duration / 60)}mins `+
+            //   `Avg Spd: ${twoDecimals(item.speed)}m/sec`);
+
           }}
         />
       </View>
@@ -73,12 +83,26 @@ const WalkTrackApp = () => {
             longitudeDelta: 0.0421,
           }}
         >
-        	<Polyline
-        		coordinates={walkinfo}
-        		strokeColor="#8E94F2"
-        		strokeWidth={6}
+          <Polyline
+            coordinates={walkinfo}
+            strokeColor="#8E94F2"
+            strokeWidth={6}
             lineDashPattern={[3,1,3,1]}
-        	/>
+          />
+          {walkinfo.length>0 &&
+            <>
+              <Marker
+                title={`Start: ${walkinfo[0].timestamp}` }
+                pinColor="green"
+                coordinate={walkinfo[0]}
+              />
+              <Marker
+                title={`Stop: ${walkinfo[walkinfo.length -1].timestamp}` }
+                pinColor="blue"
+                coordinate={walkinfo[walkinfo.length -1]}
+              />
+            </>
+          }
         </MapView>
       </View>
       <View style={styles.walklistView}>
